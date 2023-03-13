@@ -22,7 +22,7 @@ double square(double x) { return x*x; }
 ```
 
 
-```{.ROOT"}
+```{.ROOT}
 
 for (int i = 0; i < 100; i++)
 {
@@ -39,7 +39,7 @@ To get a plot, add a plot option with the name of a canvas (or pad), which will 
 
 ```{.ROOT plot="c1"}
 // you can have whatever setup code in here you want. The plot is executed at the end. 
-TCanvas * c = new TCanvas("c1","c1",800,600))
+TCanvas * c = new TCanvas("c1","c1",800,600); 
 hist.DrawCopy(); //because hist will go out of scope otherwise 
 ```
 
@@ -54,21 +54,27 @@ Allowed formats are:
  - jsroot (html, this saves a ROOT file with the TCanvas and uses JSRoot to plot the canvas) 
 
 
-```{.ROOT plot="c1" format="png") 
+```{.ROOT plot="c1" format="png"} 
 //it's ok to have an empty plot code block... 
 ```
 
 
 If you want to enable output, you can add set the echo option to true, which will enable echoing stdout within this block (supported only in main!). Note that if a plot is emitted in the same block, the text will appear first. 
 
-```.{.ROOT echo="true"} 
+```{.ROOT echo="true"} 
 
 std::cout << hist.GetEntries() << std::endl; //NB: you could use `using namespace std` in the pre section to avoid having to namespace std
 
 ```
 
 
-Another way to get values out of the script is to use the inline `!.ROOT(x)` construction, which will output the value of the expression x at that point in main.  For example we can print out that our histogram has !.ROOT(hist.GetEntries()) like that. 
+Another way to get values out of the script is to use the inline `!.ROOT(x)`
+construction, which will output the value of the expression x at that point in
+main.  For example we can print out that our histogram has
+!.ROOT(hist.GetEntries()) like that. However, if you have pandoc older than
+2.17, this won't work properly because it requires topdown traversal to process
+things in order. You can work around this by using a variable in the pre
+section. 
 
 
 

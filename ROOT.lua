@@ -22,8 +22,8 @@ local must_fill_str_text = false;
 local jsroot_canvases = {}; 
 
 local valid_formats = { latex = { "pdf", "eps", "png", "jpg" }, html = {"png","jpg","svg","jsroot"}} ; 
-local default_formats = { latex = { "pdf"}, html = {"jsroot"}}
-local exts = { pdf = "pdf", eps = "eps", png="png", jpg = "jpg", svg ="svg", jsroot="root"}; 
+local default_formats = { latex =  "pdf", html = "jsroot"}
+local exts = { pdf = "pdf", eps = "eps", png="png", jpg = "jpg", svg ="svg", jsroot="json"}; 
 
 local function emit(what, dest) 
   table.insert(dest, "\n//---------//\n");
@@ -39,32 +39,33 @@ end
 
 
 local function get_img_output_name(format) 
-  ext = exts[format] 
+  local ext = exts[format] 
   local basename = output_dest .. "plot" .. text_counter; 
   local fname = basename ..".".. ext 
   plot_counter = plot_counter + 1; 
-  return fname 
+  return fname, basename
 end
 
 
 
 local function emitPlot(c, dest, caption, format)
-  local format = format or default_format[FORMAT]; 
+  local format = format or default_formats[FORMAT]; 
 
   -- make sure valid -- 
-  if not has_value(valid_formats[FORMAT], format) then 
-    format = default_format[FORMAT] ; 
+  if not valid_formats[FORMAT][format] == nil then 
+    format = default_formats[FORMAT] ; 
   end 
 
   local fname, basename = get_img_output_name(format);  
 
-  emit( "("..c..")->SaveAs(\""..fname.."\");", dest); 
+  emit( "((TPad*)gROOT->FindObject(\""..c.."\"))->SaveAs(\""..fname.."\");", dest); 
 
   if FORMAT == "html" and format == "jsroot" then 
-    jsroot_canvases.insert(basename); 
-    return pandoc.Div(caption, { identifier = "__c_"..basename}); 
+    local id = "__c_"..basename; 
+    table.insert(jsroot_canvases,id); 
+    return pandoc.RawBlock("html","<div id='"..id.."'>"..caption.."</div>"); 
   else 
-    return pandoc.Image{caption, fname} 
+    return pandoc.Para{pandoc.Image({pandoc.Str(caption)}, fname)} ; 
   end
 
 
@@ -72,7 +73,7 @@ end
 
 local function get_file(path)
 
-  local f = open(path,"rb") 
+  local f = io.open(path,"rb") 
   if not f then 
     return nil 
   end
@@ -88,7 +89,7 @@ end
 -- then we'll have to go back if there are any texts to fill to fill them. 
 local GenCodeBlock = function(elem) 
     -- handle only codeblocks with ROOT
-    if not has_value(  elem.classes, "ROOT")  then
+    if  elem.classes[1] ~= "ROOT"  then
       return elem
     end
 
@@ -109,9 +110,10 @@ local GenCodeBlock = function(elem)
 
     -- redirect output if echoing
     if elem.attributes.echo == "true" then 
-      local fname = get_text_output_name()
-      emit("gSystem->RedirectOutput(\""..fname.."\");\n", dest)
-      table.insert(ret, pandoc.CodeBlock{ text = "to be filled" , classes = { "ROOT" } , attributes = { replacewith = fname }}); 
+      local fname = get_text_output_name(); 
+      emit("gSystem->RedirectOutput(\""..fname.."\",\"w\");\n", dest)
+      local cb=  pandoc.CodeBlock("to be filled",pandoc.Attr(fname, {"ROOT"}, {replacewith=fname})); 
+      table.insert(ret,cb); 
       must_fill_code_text = true; 
     end
 
@@ -131,33 +133,33 @@ local GenCodeBlock = function(elem)
     end 
 
     return ret
-
 end 
 
 --this finds replacement strings, triggers output to file and sets us up for replacement
 local GenStr = function (elem) 
-    local _,_val = string.find(elem, "^!.ROOT%(.+%)$")
+    print(elem.text) 
+    local _,_,val = string.find(elem.text, "^!.ROOT%((.+)%)$")
     if val == nil then 
       return elem 
     end 
     
     must_fill_str_text = true; 
     local fname = get_text_output_name()
-    emit("__write_to_file(\""..fname.."\","..val..");",dest)
-    return pandoc.Str( "!.ROOT("..fname..")") 
+    emit("__write_to_file(\""..fname.."\","..val..");",main);
+    return pandoc.Str( "!.ROOT("..fname..")"); 
 end
 
 
 local ReplaceCodeBlock = function(elem) 
-  if not has_value(  elem.classes, "ROOT")  then
+  if  elem.classes[1] ~= "ROOT"  then
       return elem
   end
-  return pandoc.CodeBlock(get_file(elem.text)) 
+  return pandoc.CodeBlock(get_file(elem.attributes.replacewith)) 
 end
 
   
 local ReplaceStr = function(elem) 
-    local _,_val = string.find(elem, "^!.ROOT%(.+%)$")
+    local _,_val = string.find(elem.text, "^!.ROOT%((.+)%)$")
     if val == nil then 
       return elem 
     end 
@@ -167,17 +169,17 @@ end
   
 
 
-local function Pandoc(elem) 
+function Pandoc(elem) 
 
-  print "hello"; 
   --first pass -- 
-  local p = pandoc.walk_block(pandoc.Div(el.blocks), { CodeBlock = GenCodeBlock, Str = GenStr }); 
+  local p = pandoc.walk_block(pandoc.Div(elem.blocks), { CodeBlock = GenCodeBlock, Str = GenStr }).content; 
 
   -- construct the ROOT file -- 
 
-  pandoc.system.make_directory(output_dest); 
+  os.execute('mkdir -p ' ..output_dest); 
   local full_macro_path = output_dest .. '/' .. macro_name .. ".C";
   local of = io.open( full_macro_path, "w") 
+
 
   -- first write out the helpers
   for _,value in ipairs(helpers) do 
@@ -198,22 +200,23 @@ local function Pandoc(elem)
   of:write("}"); 
   of:close(); 
 
-  local ret  = pandoc.pipe("root.exe -b -q " .. full_macro_path); 
+  local ret  = os.execute("root.exe -b -q " .. full_macro_path); 
 
   -- we have to run over a second time to do text replacements -- 
   if must_fill_code_text or must_fill_str_text then 
     local t= {}; 
     if must_fill_code_text  then
-      t.insert{ CodeBlock = ReplaceCodeBlock }
+      t.CodeBlock = ReplaceCodeBlock;
     end
     if must_fill_str_text then
-      t.insert{ Str = ReplaceStr }
+      t.Str = ReplaceStr;
     end 
-    p = pandoc.walk_block(pandoc.Div(p.blocks), t);
+    p = pandoc.walk_block(pandoc.Div(p), t).content;
   end
 
   -- if html and jsroot, need to add script stuff -- 
   
+  return pandoc.Pandoc(p)
 end 
  
 

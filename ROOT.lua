@@ -40,8 +40,8 @@ end
 
 local function get_img_output_name(format) 
   local ext = exts[format] 
-  local basename = output_dest .. "plot" .. text_counter; 
-  local fname = basename ..".".. ext 
+  local basename = "plot" .. text_counter; 
+  local fname = output_dest .. basename ..".".. ext 
   plot_counter = plot_counter + 1; 
   return fname, basename
 end
@@ -58,12 +58,16 @@ local function emitPlot(c, dest, caption, format)
 
   local fname, basename = get_img_output_name(format);  
 
-  emit( "((TPad*)gROOT->FindObject(\""..c.."\"))->SaveAs(\""..fname.."\");", dest); 
+  local fn = "->SaveAs(\""..fname.."\");"
+  if format == "pdf" then 
+   fn = "->Print(\""..fname.."\",\"EmbedFonts\");"
+  end
+
+  emit( "((TPad*)gROOT->FindObject(\""..c.."\"))"..fn, dest); 
 
   if FORMAT == "html" and format == "jsroot" then 
-    local id = "__c_"..basename; 
-    table.insert(jsroot_canvases,id); 
-    return pandoc.RawBlock("html","<div id='"..id.."'>"..caption.."</div>"); 
+    table.insert(jsroot_canvases,basename); 
+    return pandoc.RawBlock("html","<div id='"..basename.."', class='__ROOT_pandoc'>"..caption.."</div>"); 
   else 
     return pandoc.Para{pandoc.Image({pandoc.Str(caption)}, fname)} ; 
   end
@@ -137,7 +141,6 @@ end
 
 --this finds replacement strings, triggers output to file and sets us up for replacement
 local GenStr = function (elem) 
-    print(elem.text) 
     local _,_,val = string.find(elem.text, "^!.ROOT%((.+)%)$")
     if val == nil then 
       return elem 
@@ -159,7 +162,7 @@ end
 
   
 local ReplaceStr = function(elem) 
-    local _,_val = string.find(elem.text, "^!.ROOT%((.+)%)$")
+    local _,_,val = string.find(elem.text, "^!.ROOT%((.+)%)$")
     if val == nil then 
       return elem 
     end 
@@ -172,8 +175,16 @@ end
 function Pandoc(elem) 
 
   --first pass -- 
-  local p = pandoc.walk_block(pandoc.Div(elem.blocks), { CodeBlock = GenCodeBlock, Str = GenStr }).content; 
-
+  -- if we don't have traverse available, do code blocks first, then strings 
+  local p = nil; 
+  if PANDOC_VERSION[1] == 2 and PANDOC_VERSION[2] < 17 then 
+    local filters = {{CodeBlock = GenCodeBlock}, {Str = GenStr}};
+    p = pandoc.walk_block(pandoc.Div(elem.blocks), filters[1]).content; 
+    p = pandoc.walk_block(pandoc.Div(p), filters[2]).content; 
+  else 
+    local filters = {traverse='topdown', CodeBlock = GenCodeBlock, Str = GenStr };
+    p = pandoc.walk_block(pandoc.Div(elem.blocks), filters).content; 
+  end
   -- construct the ROOT file -- 
 
   os.execute('mkdir -p ' ..output_dest); 
@@ -216,6 +227,27 @@ function Pandoc(elem)
 
   -- if html and jsroot, need to add script stuff -- 
   
+  if FORMAT == "html" and jsroot_canvases[1] ~=nil then 
+    script_code = [[
+    <script type='module'>
+    import { httpRequest, draw, redraw, resize, cleanup } from 'https://root.cern/js/latest/modules/main.mjs';
+    var plots = document.getElementsByClassName("__ROOT_pandoc"); 
+    for (var i = 0; i < plots.length; i++) 
+    {
+      let filename = "]]..output_dest..[[" + plots[i].id + ".json"; 
+      let obj = await httpRequest(filename, 'object');
+      plots[i].style.width = obj['fCw']; 
+      plots[i].style.height = obj['fCh']; 
+      draw(plots[i].id, obj);
+    }
+    </script> 
+    ]] 
+
+    p:extend({pandoc.RawBlock("html",script_code)}); 
+
+
+  end
+
   return pandoc.Pandoc(p)
 end 
  

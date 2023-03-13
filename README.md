@@ -4,7 +4,7 @@
 This targets only html and latex output. In the case of html output, the default is to generate interactive plots with jsroot. 
 
 Code to execute belongs is a codeblock with  a .ROOT tag 
-Code here acts as if equivalent to all code living inside a function "void main()", concatenated in order order. 
+Code here acts as if equivalent to all code living inside a function "void main()", concatenated in order of appearance. 
 
 
 ```{.ROOT} 
@@ -70,12 +70,12 @@ std::cout << hist.GetEntries() << std::endl; //NB: you could use `using namespac
 
 Another way to get values out of the script is to use the inline `!.ROOT(x)`
 construction, which will output the value of the expression x at that point in
-main.  For example we can print out that our histogram has
-!.ROOT(hist.GetEntries()) like that. However, if you have pandoc older than
-2.17, this won't work properly because it requires topdown traversal to process
-things in order. You can work around this by using a variable in the pre
-section. 
-
+main.  For example we can print out that the square of 13 is !.ROOT(square(13))
+like that. However, if you have pandoc older than 2.17, this may not work as
+expected because it requires topdown traversal to process things in order they
+appear in the file. Instead, codeblocks will be processed first and then all
+inline elements, allowing you to workaround ordering by introducing variables
+to store the state at a given time. 
 
 
 

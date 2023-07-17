@@ -248,7 +248,7 @@ function Pandoc(elem)
 
   end
 
-  return pandoc.Pandoc(p)
+  return pandoc.Pandoc(p, elem.meta)
 end 
  
 

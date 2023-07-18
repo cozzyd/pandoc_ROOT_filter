@@ -40,7 +40,7 @@ end
 
 local function get_img_output_name(format) 
   local ext = exts[format] 
-  local basename = "plot" .. text_counter; 
+  local basename = "plot" .. plot_counter; 
   local fname = output_dest .. basename ..".".. ext 
   plot_counter = plot_counter + 1; 
   return fname, basename
@@ -69,7 +69,8 @@ local function emitPlot(c, dest, caption, format)
     table.insert(jsroot_canvases,basename); 
     return pandoc.RawBlock("html","<div id='"..basename.."', class='__ROOT_pandoc'>"..caption.."</div>"); 
   else 
-    return pandoc.Para{pandoc.Image({pandoc.Str(caption)}, fname)} ; 
+    return pandoc.Para{pandoc.Image({pandoc.Str(caption)}, fname)}; 
+--    return pandoc.Image({pandoc.Str(caption)}, fname) ; 
   end
 
 

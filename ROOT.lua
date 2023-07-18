@@ -80,6 +80,7 @@ local function get_file(path)
 
   local f = io.open(path,"rb") 
   if not f then 
+    print ("Could not open" .. path)
     return nil 
   end
   local stuff = f:read("*all") 
@@ -123,7 +124,19 @@ local GenCodeBlock = function(elem)
     end
 
     -- emit to macro -- 
-    emit (elem.text, dest); 
+    if  elem.attributes.include then
+      emit ("//from " .. elem.attributes.include,dest); 
+      local stuff = get_file(elem.attributes.include); 
+      if stuff == nil then 
+        emit (" #warning(\""..elem.attributes.include.." not found!\")"); 
+      else 
+        emit (stuff, dest); 
+      end
+    end 
+
+    if elem.text ~= nil then
+      emit (elem.text, dest); 
+    end
     
 
 

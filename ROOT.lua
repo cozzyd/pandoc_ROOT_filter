@@ -67,10 +67,11 @@ local function emitPlot(c, dest, caption, format)
 
   if FORMAT == "html" and format == "jsroot" then 
     table.insert(jsroot_canvases,basename); 
-    return pandoc.RawBlock("html","<div id='"..basename.."', class='__ROOT_pandoc'>"..caption.."</div>"); 
-  else 
-    return pandoc.Para{pandoc.Image({pandoc.Str(caption)}, fname)}; 
---    return pandoc.Image({pandoc.Str(caption)}, fname) ; 
+    return pandoc.RawBlock("html","<div><div id='"..basename.."', class='__ROOT_pandoc'></div><i><p class='caption' align='center' >"..caption.."</i></p></div>"); 
+  elseif FORMAT == "html" then 
+    return pandoc.RawBlock("html","<div><img src='"..fname.."' alt='"..caption.."'> <p class='caption' align='center'><i>"..caption.."</i></p></div>"); 
+  else
+    return pandoc.RawBlock("latex","\\begin{figure}\\includegraphics{"..fname.."}\\caption{"..caption.."}\\end{figure}"); 
   end
 
 
@@ -103,9 +104,24 @@ local GenCodeBlock = function(elem)
     local is_pre = false; 
     local echo = false; 
     local plot = nil; 
+    local quote = false; 
+
 
     local dest = main; 
     local ret = {}; 
+
+    -- Check if we are quoting -- 
+    if elem.attributes.quote=="true" then; 
+      quote = true; 
+      local text = "```{.ROOT" 
+      for key,val in pairs(elem.attributes) do 
+        text = text .. " " .. key .. "=\"" .. val .. "\""; 
+      end
+      text = text .. "}\n" ;
+      text = text .. elem.text;
+      text = text .. "\n```" ;
+      table.insert(ret, pandoc.CodeBlock(text))
+    end
     
     -- Check if we have pre equal to true 
     if elem.attributes.pre == "true" then 
@@ -122,6 +138,8 @@ local GenCodeBlock = function(elem)
       table.insert(ret,cb); 
       must_fill_code_text = true; 
     end
+
+    -- quote the block-- 
 
     -- emit to macro -- 
     if  elem.attributes.include then
@@ -168,7 +186,7 @@ end
 
 
 local ReplaceCodeBlock = function(elem) 
-  if  elem.classes[1] ~= "ROOT"  then
+  if  elem.classes[1] ~= "ROOT"  or elem.attributes.quote=="true" then
       return elem
   end
   return pandoc.CodeBlock(get_file(elem.attributes.replacewith)) 
@@ -250,8 +268,8 @@ function Pandoc(elem)
     {
       let filename = "]]..output_dest..[[" + plots[i].id + ".json"; 
       let obj = await httpRequest(filename, 'object');
-      plots[i].style.width = obj['fCw']; 
-      plots[i].style.height = obj['fCh']; 
+      plots[i].setAttribute("style", "width:" + obj['fCw'] + "px"); 
+      plots[i].setAttribute("style", "height:" + obj['fCh'] + "px"); 
       draw(plots[i].id, obj);
     }
     </script> 
@@ -262,6 +280,7 @@ function Pandoc(elem)
 
   end
 
+  elem.meta.graphics=true; 
   return pandoc.Pandoc(p, elem.meta)
 end 
  

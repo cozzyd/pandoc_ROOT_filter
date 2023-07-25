@@ -32,6 +32,8 @@ for (int i = 0; i < 100; i++)
 
 ```
 
+You can also "include" an external file (which acts as copied and pasted in either to the preamble if pre is true or to the current location) with the include attribute. 
+
 
 Ok, but how do you get output? 
 To get a plot, add a plot option with the name of a canvas (or pad), which will place a plot ``here" (with a loose definition of here for latex)
